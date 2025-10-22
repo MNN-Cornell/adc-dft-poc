@@ -39,7 +39,13 @@ samples, times = generate_adc_signal(
 
 ## Output
 
-Three plots are displayed:
+Two separate figure windows are displayed, and both are automatically saved as PNG files:
+
+**Figure 1: `figure1_analysis.png`**
+This window contains three plots:
 1. **Original ADC Signal** - Analog waveform over time
 2. **8-Bit Digital Representation** - Individual bit transitions
-3. **DFT Spectrum** - Frequency components (stem plot)
+3. **Overall ADC DFT Spectrum** - Frequency components of the full ADC signal (stem plot)
+
+**Figure 2: `figure2_bit_dfts.png`**
+This window contains individual DFT spectra for each bit stream (from Bit 0 to Bit 7 for an 8-bit ADC). Each plot shows the frequency components of a single bit's digital stream.

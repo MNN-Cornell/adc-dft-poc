@@ -117,51 +117,88 @@ def plot_original_signal(samples, sample_times, title="Original ADC Signal"):
 
 def plot_all_analysis(samples, times, freq_bins, magnitude, frequencies_dict):
     """
-    Create a comprehensive plot with original signal, bit representation, and DFT spectrum.
-    
+    Create comprehensive plots with original signal, bit representation, overall DFT spectrum,
+    and individual bit stream DFT spectra in a separate window.
+    Automatically saves both figures.
+
     Args:
         samples: Array of ADC samples
         times: Corresponding time values
-        freq_bins: Frequency bins from DFT
-        magnitude: Magnitude spectrum from DFT
+        freq_bins: Frequency bins from overall DFT
+        magnitude: Magnitude spectrum from overall DFT
         frequencies_dict: Dictionary of input frequencies
     """
-    fig, axes = plt.subplots(3, 1, figsize=(14, 12))
-    
-    axes[0].plot(times * 1e6, samples, linewidth=0.8)
-    axes[0].set_xlabel("Time (µs)")
-    axes[0].set_ylabel("ADC Value")
-    axes[0].set_title(f"Original ADC Signal - {list(frequencies_dict.keys())} Hz")
-    axes[0].grid(True, alpha=0.3)
-    
+    # --- First Window: Original Signal, Bit Representation, Overall DFT ---
+    fig1, axes1 = plt.subplots(3, 1, figsize=(14, 12))
+
+    # Plot 1: Original ADC Signal
+    axes1[0].plot(times * 1e6, samples, linewidth=0.8)
+    axes1[0].set_xlabel("Time (µs)")
+    axes1[0].set_ylabel("ADC Value")
+    axes1[0].set_title(f"Original ADC Signal - {list(frequencies_dict.keys())} Hz")
+    axes1[0].grid(True, alpha=0.3)
+
+    # Plot 2: 8-Bit Digital Representation
     bit_matrix = np.array([(samples >> bit) & 1 for bit in range(ADC_RESOLUTION)])
-    
     for bit in range(ADC_RESOLUTION):
         bit_line = bit_matrix[bit]
         y_offset = ADC_RESOLUTION - 1 - bit
-        axes[1].step(times * 1e6, bit_line + y_offset, where='post', linewidth=2, label=f"Bit {bit}")
-    
-    axes[1].set_xlabel("Time (µs)")
-    axes[1].set_ylabel("Bit")
-    axes[1].set_title(f"{ADC_RESOLUTION}-Bit Digital Representation")
-    axes[1].set_ylim(-0.5, ADC_RESOLUTION - 0.5)
-    axes[1].set_yticks(range(ADC_RESOLUTION))
-    axes[1].set_yticklabels([f"Bit {i}" for i in range(ADC_RESOLUTION)])
-    axes[1].set_xlim(axes[0].get_xlim())
-    axes[1].grid(True, alpha=0.3, axis='x')
-    axes[1].set_facecolor('#f5f5f5')
-    
+        axes1[1].step(times * 1e6, bit_line + y_offset, where='post', linewidth=2, label=f"Bit {bit}")
+    axes1[1].set_xlabel("Time (µs)")
+    axes1[1].set_ylabel("Bit")
+    axes1[1].set_title(f"{ADC_RESOLUTION}-Bit Digital Representation")
+    axes1[1].set_ylim(-0.5, ADC_RESOLUTION - 0.5)
+    axes1[1].set_yticks(range(ADC_RESOLUTION))
+    axes1[1].set_yticklabels([f"Bit {i}" for i in range(ADC_RESOLUTION)])
+    axes1[1].set_xlim(axes1[0].get_xlim())
+    axes1[1].grid(True, alpha=0.3, axis='x')
+    axes1[1].set_facecolor('#f5f5f5')
+
+    # Plot 3: Overall ADC DFT Spectrum
     positive_freq_idx = freq_bins >= 0
     freqs_positive = freq_bins[positive_freq_idx]
     mag_positive = magnitude[positive_freq_idx]
-    axes[2].stem(freqs_positive, mag_positive, basefmt=' ')
-    axes[2].set_xlabel("Frequency (Hz)")
-    axes[2].set_ylabel("Magnitude")
-    axes[2].set_title(f"ADC DFT Spectrum")
-    axes[2].grid(True, alpha=0.3, axis='y')
-    
-    plt.tight_layout()
-    plt.show()
+    axes1[2].stem(freqs_positive, mag_positive, basefmt=' ')
+    axes1[2].set_xlabel("Frequency (Hz)")
+    axes1[2].set_ylabel("Magnitude")
+    axes1[2].set_title(f"Overall ADC DFT Spectrum")
+    axes1[2].grid(True, alpha=0.3, axis='y')
+
+    fig1.tight_layout() # Apply tight_layout to the first figure
+    fig1.savefig('figure1_analysis.png') # Save the first figure
+
+    # Store the x-axis limits for DFT plots to align them in the second window
+    dft_xlim = axes1[2].get_xlim()
+
+    # --- Second Window: Individual Bit Stream DFTs ---
+    fig2, axes2 = plt.subplots(ADC_RESOLUTION, 1, figsize=(14, 4 * ADC_RESOLUTION))
+    fig2.suptitle("Individual Bit Stream DFT Spectra", fontsize=16) # Add a suptitle for the second window
+
+    # Ensure axes2 is always an array, even if ADC_RESOLUTION is 1
+    if ADC_RESOLUTION == 1:
+        axes2 = [axes2]
+
+    # Plot DFT for each bit stream
+    for bit in range(ADC_RESOLUTION):
+        bit_stream = bit_matrix[bit]
+        bit_freq_bins, bit_magnitude, _ = compute_dft(bit_stream, apply_window=False)
+
+        positive_bit_freq_idx = bit_freq_bins >= 0
+        bit_freqs_positive = bit_freq_bins[positive_bit_freq_idx]
+        bit_mag_positive = bit_magnitude[positive_bit_freq_idx]
+
+        axes2[bit].stem(bit_freqs_positive, bit_mag_positive, basefmt=' ')
+        axes2[bit].set_xlabel("Frequency (Hz)")
+        axes2[bit].set_ylabel("Magnitude")
+        axes2[bit].set_title(f"DFT Spectrum for Bit {bit}")
+        axes2[bit].grid(True, alpha=0.3, axis='y')
+        axes2[bit].set_xlim(dft_xlim) # Align x-axis with the overall DFT
+
+    fig2.tight_layout() # Apply tight_layout to the second figure
+    plt.subplots_adjust(top=0.95) # Adjust top to make space for suptitle
+    fig2.savefig('figure2_bit_dfts.png') # Save the second figure
+
+    plt.show() # Show both figures
 
 
 if __name__ == "__main__":
