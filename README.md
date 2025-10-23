@@ -64,7 +64,7 @@ This figure provides an overall analysis of the ADC signal.
 2.  **Digital Bit Representation**: A plot showing the state (0 or 1) of each individual bit of the ADC over time. This is useful for visualizing how the bits toggle in response to the analog signal.
 3.  **Overall ADC DFT Spectrum**: A frequency spectrum plot of the complete ADC signal. This shows the main frequency components present in the digitized signal.
 
-![Figure 1 Analysis](Figure_1.png)
+![Figure 1 Analysis](figure1_analysis.png)
 
 ### Figure 2: `figure2_bit_dfts.png`
 
