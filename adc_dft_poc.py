@@ -1,70 +1,103 @@
+# adc_dft_poc.py
+#
+# Author: Gemini
+# Date: 2025-10-23
+#
+# Description:
+# This script simulates the process of an Analog-to-Digital Converter (ADC)
+# and performs a Discrete Fourier Transform (DFT) on the resulting digital signal.
+# It is designed to help visualize and understand the frequency components
+# present in a quantized signal and its individual bitstreams.
+#
+# The script generates a composite signal from multiple sine waves, simulates
+# ADC quantization, and then computes and plots the DFT of the overall signal
+# as well as the DFT of each individual bit of the ADC output. This is useful
+# for analyzing how different frequency components of the analog signal
+# manifest in the digital domain.
+
 import numpy as np
 import matplotlib.pyplot as plt
 
 # --- ADC & Signal Configuration ---
 
-# ADC resolution in bits. This determines the number of discrete digital levels.
-# An 8-bit ADC has 2^8 = 256 levels.
+# ADC_RESOLUTION: ADC resolution in bits.
+# This determines the number of discrete digital levels the ADC can represent.
+# An 8-bit ADC has 2^8 = 256 levels, ranging from 0 to 255.
 ADC_RESOLUTION = 8
 
-# Maximum digital value for the ADC. For an 8-bit ADC, this is 255.
+# ADC_MAX_VALUE: The maximum digital value for the ADC.
+# For an N-bit ADC, this is 2^N - 1.
 ADC_MAX_VALUE = 2**ADC_RESOLUTION - 1
 
-# Sampling rate of the ADC in Hz.
-# This is the number of samples taken per second.
-# The value 500_000 / 10000 is a simplified representation of a potential real-world scenario
-# where a high-speed clock is divided down for the ADC.
+# ADC_SAMPLING_RATE: The sampling rate of the ADC in Hz.
+# This is the number of samples taken per second from the analog signal.
+# The Nyquist-Shannon sampling theorem states that the sampling rate must be at
+# least twice the highest frequency component in the signal to avoid aliasing.
+# The value 500_000 / 10000 is a simplified representation of a potential
+# real-world scenario where a high-speed clock is divided down for the ADC.
 ADC_SAMPLING_RATE = 500_000 / 10000
 
 def generate_adc_signal(frequencies_dict, duration_periods=10, noise_level=0.0):
     """
     Generates a simulated ADC output signal from a combination of sine waves.
 
-    This function creates a composite signal from multiple frequency components,
-    adds optional noise, and then simulates the quantization process of an ADC.
+    This function creates a composite analog signal from multiple frequency
+    components, adds optional Gaussian noise, and then simulates the quantization
+    process of an ADC to produce a digital signal.
 
     Args:
         frequencies_dict (dict): A dictionary where keys are frequencies in Hz
-                                 and values are their corresponding weights in the signal.
-                                 The weights should ideally sum to 1.0 for a normalized signal.
+                                 and values are their corresponding weights
+                                 (amplitudes) in the signal. The weights should
+                                 ideally sum to 1.0 for a normalized signal to
+                                 fit within the ADC's [-1, 1] input range.
                                  Example: {1000: 0.5, 2000: 0.5}
-        duration_periods (int): The number of periods of the lowest frequency to generate.
-                                This determines the total duration of the signal. (Default: 10)
-        noise_level (float): The standard deviation of Gaussian noise to add to the signal.
-                             This is on a 0-1 scale relative to the ADC's input range. (Default: 0.0)
+        duration_periods (int): The number of periods of the lowest frequency
+                                to generate. This determines the total duration
+                                of the signal and affects the frequency
+                                resolution of the subsequent DFT. (Default: 10)
+        noise_level (float): The standard deviation of Gaussian noise to add to
+                             the analog signal. This is on a 0-1 scale relative
+                             to the ADC's input range. (Default: 0.0)
 
     Returns:
         tuple: A tuple containing:
-            - np.ndarray: An array of quantized ADC sample values (0 to ADC_MAX_VALUE).
+            - np.ndarray: An array of quantized ADC sample values (integers from
+                          0 to ADC_MAX_VALUE).
             - np.ndarray: An array of corresponding time values for each sample.
     """
     # Determine the lowest frequency to calculate the signal's fundamental period.
+    # This is used to set the overall duration of the generated signal.
     min_freq = min(frequencies_dict.keys())
     period = 1 / min_freq
     total_duration = period * duration_periods
 
-    # Calculate the total number of samples based on duration and sampling rate.
+    # Calculate the total number of samples to generate based on the signal
+    # duration and the ADC's sampling rate.
     num_samples = int(ADC_SAMPLING_RATE * total_duration)
-    # Generate a time vector for the samples.
+    # Generate a time vector representing the time at each sample point.
     sample_times = np.linspace(0, total_duration, num_samples, endpoint=False)
 
-    # Create the composite signal by summing weighted sine waves.
+    # Create the composite analog signal by summing the weighted sine waves.
     signal = np.zeros_like(sample_times)
     for freq, weight in frequencies_dict.items():
         signal += weight * np.sin(2 * np.pi * freq * sample_times)
 
-    # Add Gaussian noise if specified.
+    # Add Gaussian (white) noise to the signal if a noise level is specified.
     if noise_level > 0:
         noise = np.random.normal(0, noise_level, len(signal))
         signal += noise
 
-    # Clip the signal to the range [-1, 1] to simulate the ADC's input voltage limits.
+    # Clip the signal to the range [-1, 1] to simulate the ADC's input
+    # voltage limits. Any part of the signal outside this range is saturated.
     signal = np.clip(signal, -1, 1)
 
     # --- ADC Quantization ---
-    # 1. Scale the signal from [-1, 1] to [0, 2].
-    # 2. Normalize to the ADC's range [0, ADC_MAX_VALUE].
-    # 3. Convert to an integer type to represent the digital output.
+    # This process converts the continuous analog signal into a discrete digital signal.
+    # 1. Scale the signal from its [-1, 1] range to [0, 2].
+    # 2. Normalize this to the ADC's digital range [0, ADC_MAX_VALUE].
+    # 3. Convert the floating-point values to integers, representing the final
+    #    digital output of the ADC.
     adc_samples = ((signal + 1) / 2 * ADC_MAX_VALUE).astype(np.uint16)
 
     return adc_samples, sample_times
@@ -74,13 +107,16 @@ def compute_dft(samples, apply_window=True):
     """
     Computes the Discrete Fourier Transform (DFT) of a signal.
 
-    This function can apply a windowing function to reduce spectral leakage
-    before performing the Fast Fourier Transform (FFT).
+    This function transforms a time-domain signal into the frequency domain.
+    It can apply a windowing function to the signal before the transform to
+    reduce spectral leakage, which occurs when the signal is not periodic
+    within the sampling window.
 
     Args:
-        samples (np.ndarray): An array of ADC samples.
+        samples (np.ndarray): An array of ADC samples (the time-domain signal).
         apply_window (bool): If True, applies a Hamming window to the samples
-                             before the FFT. (Default: True)
+                             before performing the FFT. This is generally
+                             recommended for non-periodic signals. (Default: True)
 
     Returns:
         tuple: A tuple containing:
@@ -90,22 +126,27 @@ def compute_dft(samples, apply_window=True):
     """
     N = len(samples)
 
-    # Apply a Hamming window to reduce spectral leakage.
+    # Apply a window function to the samples to reduce spectral leakage.
+    # The Hamming window is a common choice that tapers the signal at its
+    # beginning and end.
     if apply_window:
         window = np.hamming(N)
         windowed_samples = samples * window
     else:
         windowed_samples = samples
 
-    # Compute the FFT.
+    # Compute the Fast Fourier Transform (FFT), an efficient algorithm for DFT.
     dft = np.fft.fft(windowed_samples)
 
-    # Calculate the frequency bins for the DFT.
+    # Calculate the frequency bins corresponding to each point in the DFT output.
     frequencies = np.fft.fftfreq(N, d=1 / ADC_SAMPLING_RATE)
 
     # --- Spectrum Calculation ---
-    # 1. Calculate the magnitude and normalize by the number of samples (N).
-    # 2. Calculate the phase angle of each frequency component.
+    # 1. Calculate the magnitude of the complex DFT output. This represents the
+    #    amplitude of each frequency component. It's normalized by the number
+    #    of samples (N) to make it independent of signal length.
+    # 2. Calculate the phase angle of each frequency component. This represents
+    #    the phase shift of the component.
     magnitude_spectrum = np.abs(dft) / N
     phase_spectrum = np.angle(dft)
 
@@ -116,19 +157,20 @@ def plot_spectrum(frequencies, magnitude_spectrum, title="ADC DFT Spectrum"):
     """
     Plots the frequency spectrum from DFT results.
 
-    This function visualizes the magnitude of each frequency component.
-    It only plots the positive frequency components, as the negative
-    frequencies are a mirror image for real-valued signals.
+    This function visualizes the magnitude of each frequency component. For
+    real-valued input signals, the DFT is symmetric, so this function only
+    plots the positive frequency components.
 
     Args:
-        frequencies (np.ndarray): An array of frequency bins in Hz.
+        frequencies (np.ndarray): An array of frequency bins in Hz from the DFT.
         magnitude_spectrum (np.ndarray): The magnitude of each frequency component.
         title (str): The title for the plot. (Default: "ADC DFT Spectrum")
 
     Returns:
         tuple: A tuple containing the Matplotlib figure and axes objects.
     """
-    # Filter for positive frequencies only.
+    # Filter for positive frequencies only, as the negative frequency part of
+    # the spectrum is a mirror image for real signals and adds no new information.
     positive_freq_idx = frequencies >= 0
     freqs_positive = frequencies[positive_freq_idx]
     mag_positive = magnitude_spectrum[positive_freq_idx]
@@ -156,7 +198,7 @@ def plot_original_signal(samples, sample_times, title="Original ADC Signal"):
         tuple: A tuple containing the Matplotlib figure and axes objects.
     """
     fig, ax = plt.subplots(figsize=(12, 5))
-    # Plot time in microseconds for better readability.
+    # Plot time in microseconds (µs) for better readability on the x-axis.
     ax.plot(sample_times * 1e6, samples, linewidth=0.8)
     ax.set_xlabel("Time (µs)")
     ax.set_ylabel("ADC Value")
@@ -170,10 +212,12 @@ def plot_all_analysis(samples, times, freq_bins, magnitude, frequencies_dict):
     """
     Creates and saves a comprehensive set of plots for analysis.
 
-    This function generates two separate figures:
-    1.  A figure with the original signal, its digital bit representation,
-        and the overall DFT spectrum.
-    2.  A figure showing the individual DFT spectra for each bit stream.
+    This function generates two separate figures for a detailed analysis:
+    1.  A figure showing the original signal, its digital bit representation
+        over time, and the overall DFT spectrum of the quantized signal.
+    2.  A figure showing the individual DFT spectra for each bit stream of the
+        ADC output. This is useful for seeing how frequency components are
+        distributed among the bits.
 
     Both figures are automatically saved to PNG files.
 
@@ -191,11 +235,12 @@ def plot_all_analysis(samples, times, freq_bins, magnitude, frequencies_dict):
     axes1[0].plot(times * 1e6, samples, linewidth=0.8)
     axes1[0].set_xlabel("Time (µs)")
     axes1[0].set_ylabel("ADC Value")
-    axes1[0].set_title(f"Original ADC Signal - {list(frequencies_dict.keys())} Hz")
+    axes1[0].set_title(f"Original ADC Signal - Frequencies: {list(frequencies_dict.keys())} Hz")
     axes1[0].grid(True, alpha=0.3)
 
     # Plot 2: Digital Bit Representation
-    # Extract each bit from the ADC samples into a matrix.
+    # Extract each bit from the ADC samples into a matrix. Each row of the
+    # matrix corresponds to a bit (from LSB to MSB).
     bit_matrix = np.array([(samples >> bit) & 1 for bit in range(ADC_RESOLUTION)])
     for bit in range(ADC_RESOLUTION):
         bit_line = bit_matrix[bit]
@@ -210,7 +255,7 @@ def plot_all_analysis(samples, times, freq_bins, magnitude, frequencies_dict):
     axes1[1].set_yticklabels([f"Bit {i}" for i in range(ADC_RESOLUTION)])
     axes1[1].set_xlim(axes1[0].get_xlim()) # Align x-axis with the signal plot.
     axes1[1].grid(True, alpha=0.3, axis='x')
-    axes1[1].set_facecolor('#f5f5f5') # Light gray background for clarity.
+    axes1[1].set_facecolor('#f5f5f5') # Light gray background for better readability.
 
     # Plot 3: Overall ADC DFT Spectrum
     positive_freq_idx = freq_bins > 0
@@ -232,14 +277,15 @@ def plot_all_analysis(samples, times, freq_bins, magnitude, frequencies_dict):
     fig2, axes2 = plt.subplots(ADC_RESOLUTION, 1, figsize=(14, 4 * ADC_RESOLUTION))
     fig2.suptitle("Individual Bit Stream DFT Spectra", fontsize=16)
 
-    # Ensure axes2 is always an array for consistent indexing.
+    # Ensure axes2 is always an array for consistent indexing, even if ADC_RESOLUTION is 1.
     if ADC_RESOLUTION == 1:
         axes2 = [axes2]
 
     # Compute and plot the DFT for each individual bit stream.
     for bit in range(ADC_RESOLUTION):
         bit_stream = bit_matrix[bit]
-        # Compute DFT for the single bit stream.
+        # Compute DFT for the single bit stream. A windowing function is not
+        # applied here to see the raw spectral content of the digital signal.
         bit_freq_bins, bit_magnitude, _ = compute_dft(bit_stream, apply_window=False)
 
         positive_bit_freq_idx = bit_freq_bins > 0
@@ -251,7 +297,7 @@ def plot_all_analysis(samples, times, freq_bins, magnitude, frequencies_dict):
         axes2[bit].set_ylabel("Magnitude")
         axes2[bit].set_title(f"DFT Spectrum for Bit {bit}")
         axes2[bit].grid(True, alpha=0.3, axis='y')
-        axes2[bit].set_xlim(dft_xlim) # Align x-axis with the overall DFT plot.
+        axes2[bit].set_xlim(dft_xlim) # Align x-axis with the overall DFT plot for comparison.
 
     fig2.tight_layout()
     plt.subplots_adjust(top=0.95) # Adjust layout to make space for the suptitle.
@@ -262,25 +308,34 @@ def plot_all_analysis(samples, times, freq_bins, magnitude, frequencies_dict):
 
 if __name__ == "__main__":
     # --- Simulation Parameters ---
-    # Define the frequencies (in Hz) and their relative weights for the input signal.
+    # This is the main execution block of the script.
+    # Here, you can define the parameters for the signal generation and analysis.
+
+    # Define the frequencies (in Hz) and their relative weights (amplitudes)
+    # for the input analog signal.
+    # For example, {2: 0.5, 5: 0.5} creates a signal composed of a 2 Hz sine
+    # wave and a 5 Hz sine wave, each with 50% of the total amplitude.
     frequencies = {2: 0.5, 5: 0.5}
 
     # Generate the ADC signal based on the specified parameters.
     samples, times = generate_adc_signal(
         frequencies_dict=frequencies,
-        duration_periods=10,  # Generate 10 periods of the lowest frequency.
-        noise_level=0         # No noise.
+        duration_periods=10,  # Generate 10 periods of the lowest frequency (2 Hz).
+        noise_level=0         # No noise is added to the signal.
     )
 
     # --- Output Information ---
+    # Print summary information about the generated signal.
     print(f"Generated {len(samples)} samples")
     print(f"Sample rate: {ADC_SAMPLING_RATE} Hz")
     print(f"Signal frequencies: {frequencies}")
     print(f"ADC value range: 0 to {ADC_MAX_VALUE}")
-    print(f"Sample min: {samples.min()}, max: {samples.max()}")
+    print(f"Generated sample value range: min={samples.min()}, max={samples.max()}")
 
     # Compute the DFT of the generated ADC signal.
-    # A windowing function is not applied here to maintain peak clarity for this specific simulation.
+    # A windowing function is not applied here (apply_window=False) to maintain
+    # peak clarity for this specific simulation, as the signal is periodic
+    # within the sampling window.
     freq_bins, magnitude, phase = compute_dft(samples, apply_window=False)
 
     # Generate and display all analysis plots.
