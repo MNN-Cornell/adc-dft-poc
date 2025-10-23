@@ -13,6 +13,10 @@ The simulation generates a composite analog signal, quantizes it as an ADC would
 - **DFT Analysis**: Compute the frequency spectrum of both the full ADC signal and each individual bit stream. This helps in understanding how different frequencies are represented in the digital domain.
 - **Comprehensive Plots**: The script generates and saves detailed plots for a complete analysis.
 
+## System Diagram
+
+![System Diagram](diagram.png)
+
 ## How to Run
 
 To run the simulation, simply execute the script from your terminal:
