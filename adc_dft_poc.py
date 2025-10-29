@@ -212,14 +212,18 @@ def plot_all_analysis(samples, times, freq_bins, magnitude, frequencies_dict):
     """
     Creates and saves a comprehensive set of plots for analysis.
 
-    This function generates two separate figures for a detailed analysis:
+    This function generates four separate figures for a detailed analysis:
     1.  A figure showing the original signal, its digital bit representation
-        over time, and the overall DFT spectrum of the quantized signal.
+        over time, and the overall DFT spectrum of the quantized signal in Hz,
+        angular frequency, and normalized frequency.
     2.  A figure showing the individual DFT spectra for each bit stream of the
-        ADC output. This is useful for seeing how frequency components are
-        distributed among the bits.
+        ADC output (frequency in Hz).
+    3.  A figure showing the individual DFT spectra for each bit stream with
+        angular frequency (rad/s) on x-axis.
+    4.  A figure showing the individual DFT spectra for each bit stream with
+        normalized frequency on x-axis.
 
-    Both figures are automatically saved to PNG files.
+    All figures are automatically saved to PNG files.
 
     Args:
         samples (np.ndarray): An array of ADC samples.
@@ -228,8 +232,8 @@ def plot_all_analysis(samples, times, freq_bins, magnitude, frequencies_dict):
         magnitude (np.ndarray): The magnitude spectrum from the overall DFT.
         frequencies_dict (dict): The dictionary of input frequencies for labeling.
     """
-    # --- Figure 1: Original Signal, Bit Representation, and Overall DFT ---
-    fig1, axes1 = plt.subplots(3, 1, figsize=(14, 12))
+    # --- Figure 1: Original Signal, Bit Representation, and Overall DFT (Hz, Angular, Normalized) ---
+    fig1, axes1 = plt.subplots(5, 1, figsize=(14, 20))
 
     # Plot 1: Original ADC Signal
     axes1[0].plot(times * 1e6, samples, linewidth=0.8)
@@ -257,21 +261,53 @@ def plot_all_analysis(samples, times, freq_bins, magnitude, frequencies_dict):
     axes1[1].grid(True, alpha=0.3, axis='x')
     axes1[1].set_facecolor('#f5f5f5') # Light gray background for better readability.
 
-    # Plot 3: Overall ADC DFT Spectrum
+    # Plot 3: Overall ADC DFT Spectrum (Hz) - Exclude DC component (f=0)
     positive_freq_idx = freq_bins > 0
     freqs_positive = freq_bins[positive_freq_idx]
     mag_positive = magnitude[positive_freq_idx]
     axes1[2].stem(freqs_positive, mag_positive, basefmt=' ')
     axes1[2].set_xlabel("Frequency (Hz)")
     axes1[2].set_ylabel("Magnitude")
-    axes1[2].set_title("Overall ADC DFT Spectrum")
+    axes1[2].set_title("Overall ADC DFT Spectrum (Frequency in Hz)")
     axes1[2].grid(True, alpha=0.3, axis='y')
+
+    # Plot 4: Overall ADC DFT Spectrum (Angular Frequency) - Exclude DC component
+    # Angular frequency: ω = 2πf, range is 0 to 2π×fs (not limited to 2π!)
+    all_freq_idx = freq_bins > 0  # Exclude f=0
+    freqs_all = freq_bins[all_freq_idx]
+    mag_all = magnitude[all_freq_idx]
+    
+    angular_freqs_all = 2 * np.pi * freqs_all
+    angular_freqs_in_pi = angular_freqs_all / np.pi
+    
+    axes1[3].stem(angular_freqs_in_pi, mag_all, basefmt=' ')
+    axes1[3].set_xlabel("Angular Frequency (×π rad/s)")
+    axes1[3].set_ylabel("Magnitude")
+    axes1[3].set_title("Overall ADC DFT Spectrum (Angular Frequency)")
+    axes1[3].grid(True, alpha=0.3, axis='y')
+
+    # Plot 5: Overall ADC DFT Spectrum (Normalized Frequency) - Full spectrum 0 to 2π
+    normalized_freqs_all = 2 * np.pi * freqs_all / ADC_SAMPLING_RATE
+    # Map negative frequencies to the [π, 2π] range
+    normalized_freqs_all = np.where(normalized_freqs_all < 0, normalized_freqs_all + 2 * np.pi, normalized_freqs_all)
+    normalized_freqs_in_pi = normalized_freqs_all / np.pi
+    
+    # Sort by normalized frequency for proper display
+    sort_idx_norm = np.argsort(normalized_freqs_in_pi)
+    axes1[4].stem(normalized_freqs_in_pi[sort_idx_norm], mag_all[sort_idx_norm], basefmt=' ')
+    axes1[4].set_xlabel("Normalized Frequency (×π rad/sample)")
+    axes1[4].set_ylabel("Magnitude")
+    axes1[4].set_title("Overall ADC DFT Spectrum (Normalized Frequency)")
+    axes1[4].grid(True, alpha=0.3, axis='y')
+    axes1[4].set_xlim([0, 2])
 
     fig1.tight_layout()
     fig1.savefig('figure1_analysis.png') # Save the first figure.
 
-    # Store the x-axis limits to align the DFT plots in the second figure.
+    # Store the x-axis limits to align the DFT plots in the subsequent figures.
     dft_xlim = axes1[2].get_xlim()
+    angular_xlim = axes1[3].get_xlim()  # This is already in units of π
+    normalized_xlim = axes1[4].get_xlim()
 
     # --- Figure 2: Individual Bit Stream DFTs ---
     fig2, axes2 = plt.subplots(ADC_RESOLUTION, 1, figsize=(14, 4 * ADC_RESOLUTION))
@@ -281,14 +317,14 @@ def plot_all_analysis(samples, times, freq_bins, magnitude, frequencies_dict):
     if ADC_RESOLUTION == 1:
         axes2 = [axes2]
 
-    # Compute and plot the DFT for each individual bit stream.
+    # Compute and plot the DFT for each individual bit stream (exclude DC).
     for bit in range(ADC_RESOLUTION):
         bit_stream = bit_matrix[bit]
         # Compute DFT for the single bit stream. A windowing function is not
         # applied here to see the raw spectral content of the digital signal.
         bit_freq_bins, bit_magnitude, _ = compute_dft(bit_stream, apply_window=False)
 
-        positive_bit_freq_idx = bit_freq_bins > 0
+        positive_bit_freq_idx = bit_freq_bins > 0  # Exclude f=0
         bit_freqs_positive = bit_freq_bins[positive_bit_freq_idx]
         bit_mag_positive = bit_magnitude[positive_bit_freq_idx]
 
@@ -303,7 +339,75 @@ def plot_all_analysis(samples, times, freq_bins, magnitude, frequencies_dict):
     plt.subplots_adjust(top=0.95) # Adjust layout to make space for the suptitle.
     fig2.savefig('figure2_bit_dfts.png') # Save the second figure.
 
-    plt.show() # Display both figures.
+    # --- Figure 3: Individual Bit Stream DFTs (Angular Frequency) ---
+    fig3, axes3 = plt.subplots(ADC_RESOLUTION, 1, figsize=(14, 4 * ADC_RESOLUTION))
+    fig3.suptitle("Individual Bit Stream DFT Spectra (Angular Frequency)", fontsize=16)
+
+    # Ensure axes3 is always an array for consistent indexing, even if ADC_RESOLUTION is 1.
+    if ADC_RESOLUTION == 1:
+        axes3 = [axes3]
+
+    # Compute and plot the DFT for each individual bit stream (angular frequency, exclude DC).
+    for bit in range(ADC_RESOLUTION):
+        bit_stream = bit_matrix[bit]
+        bit_freq_bins, bit_magnitude, _ = compute_dft(bit_stream, apply_window=False)
+
+        # Exclude DC component (f=0)
+        all_bit_freq_idx = bit_freq_bins > 0
+        bit_freqs_all = bit_freq_bins[all_bit_freq_idx]
+        bit_mag_all = bit_magnitude[all_bit_freq_idx]
+        
+        bit_angular_freqs_all = 2 * np.pi * bit_freqs_all
+        bit_angular_freqs_in_pi = bit_angular_freqs_all / np.pi
+        
+        axes3[bit].stem(bit_angular_freqs_in_pi, bit_mag_all, basefmt=' ')
+        axes3[bit].set_xlabel("Angular Frequency (×π rad/s)")
+        axes3[bit].set_ylabel("Magnitude")
+        axes3[bit].set_title(f"DFT Spectrum for Bit {bit} (Angular Frequency)")
+        axes3[bit].grid(True, alpha=0.3, axis='y')
+        axes3[bit].set_xlim(angular_xlim) # Align x-axis with the overall DFT plot for comparison.
+
+    fig3.tight_layout()
+    plt.subplots_adjust(top=0.95) # Adjust layout to make space for the suptitle.
+    fig3.savefig('figure3_bit_dfts_angular.png') # Save the third figure.
+
+    # --- Figure 4: Individual Bit Stream DFTs (Normalized Frequency) ---
+    fig4, axes4 = plt.subplots(ADC_RESOLUTION, 1, figsize=(14, 4 * ADC_RESOLUTION))
+    fig4.suptitle("Individual Bit Stream DFT Spectra (Normalized Frequency)", fontsize=16)
+
+    # Ensure axes4 is always an array for consistent indexing, even if ADC_RESOLUTION is 1.
+    if ADC_RESOLUTION == 1:
+        axes4 = [axes4]
+
+    # Compute and plot the DFT for each individual bit stream (normalized frequency, exclude DC).
+    for bit in range(ADC_RESOLUTION):
+        bit_stream = bit_matrix[bit]
+        bit_freq_bins, bit_magnitude, _ = compute_dft(bit_stream, apply_window=False)
+
+        # Exclude DC component (f=0)
+        all_bit_freq_idx = bit_freq_bins > 0
+        bit_freqs_all = bit_freq_bins[all_bit_freq_idx]
+        bit_mag_all = bit_magnitude[all_bit_freq_idx]
+        
+        bit_normalized_freqs_all = 2 * np.pi * bit_freqs_all / ADC_SAMPLING_RATE
+        # Map negative frequencies to the [π, 2π] range
+        bit_normalized_freqs_all = np.where(bit_normalized_freqs_all < 0, bit_normalized_freqs_all + 2 * np.pi, bit_normalized_freqs_all)
+        bit_normalized_freqs_in_pi = bit_normalized_freqs_all / np.pi
+        
+        # Sort by normalized frequency for proper display
+        bit_sort_idx_norm = np.argsort(bit_normalized_freqs_in_pi)
+        axes4[bit].stem(bit_normalized_freqs_in_pi[bit_sort_idx_norm], bit_mag_all[bit_sort_idx_norm], basefmt=' ')
+        axes4[bit].set_xlabel("Normalized Frequency (×π rad/sample)")
+        axes4[bit].set_ylabel("Magnitude")
+        axes4[bit].set_title(f"DFT Spectrum for Bit {bit} (Normalized Frequency)")
+        axes4[bit].grid(True, alpha=0.3, axis='y')
+        axes4[bit].set_xlim(normalized_xlim) # Align x-axis with the overall DFT plot for comparison.
+
+    fig4.tight_layout()
+    plt.subplots_adjust(top=0.95) # Adjust layout to make space for the suptitle.
+    fig4.savefig('figure4_bit_dfts_normalized.png') # Save the fourth figure.
+
+    plt.show() # Display all figures.
 
 
 if __name__ == "__main__":

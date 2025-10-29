@@ -58,22 +58,47 @@ if __name__ == "__main__":
 
 ## Output Analysis
 
-The script produces two main output figures, which are displayed on the screen and also saved as PNG files in the project directory.
+The script produces four main output figures, which are displayed on the screen and also saved as PNG files in the project directory. All frequency spectra exclude the DC component (f=0) for better visualization of AC signal components.
 
 ### Figure 1: `figure1_analysis.png`
 
-This figure provides an overall analysis of the ADC signal.
+This figure provides a comprehensive overall analysis of the ADC signal with five subplots:
 
 1.  **Original ADC Signal**: A plot of the quantized ADC values over time. This shows the final digital waveform.
 2.  **Digital Bit Representation**: A plot showing the state (0 or 1) of each individual bit of the ADC over time. This is useful for visualizing how the bits toggle in response to the analog signal.
-3.  **Overall ADC DFT Spectrum**: A frequency spectrum plot of the complete ADC signal. This shows the main frequency components present in the digitized signal.
+3.  **Overall ADC DFT Spectrum (Hz)**: A frequency spectrum plot in Hertz, showing the main frequency components present in the digitized signal.
+4.  **Overall ADC DFT Spectrum (Angular Frequency)**: The same spectrum displayed in angular frequency (×π rad/s). This representation is useful for continuous-time analysis.
+5.  **Overall ADC DFT Spectrum (Normalized Frequency)**: The spectrum in normalized angular frequency (×π rad/sample). This representation ranges from 0 to 2π and is sampling-rate independent, making it ideal for digital filter design.
 
 ![Figure 1 Analysis](figure1_analysis.png)
 
 ### Figure 2: `figure2_bit_dfts.png`
 
-This figure provides a DFT analysis for each individual bit stream of the ADC output. For an 8-bit ADC, it will contain 8 separate plots (from Bit 0 to Bit 7).
+This figure provides a DFT analysis for each individual bit stream of the ADC output, with frequency displayed in Hz. For an 8-bit ADC, it will contain 8 separate plots (from Bit 0 to Bit 7).
 
 Each plot shows the frequency spectrum of a single bit's digital stream. This is a powerful tool for understanding which frequencies have the most significant impact on each bit. For example, you might find that lower-frequency components are more prominent in the most significant bits (MSBs), while higher-frequency components affect the least significant bits (LSBs).
 
 ![Figure 2 Bit DFTs](figure2_bit_dfts.png)
+
+### Figure 3: `figure3_bit_dfts_angular.png`
+
+This figure shows the same individual bit stream DFT analysis as Figure 2, but with the x-axis displayed in **angular frequency (×π rad/s)**. This representation is useful for understanding the signal behavior in continuous-time angular frequency terms.
+
+![Figure 3 Bit DFTs Angular](figure3_bit_dfts_angular.png)
+
+### Figure 4: `figure4_bit_dfts_normalized.png`
+
+This figure displays the individual bit stream DFT spectra with the x-axis in **normalized angular frequency (×π rad/sample)**. The frequency range spans from 0 to 2π rad/sample, making it sampling-rate independent. This representation is particularly valuable for:
+- Digital filter design
+- Comparing signals across different sampling rates
+- Understanding the discrete-time frequency content
+
+![Figure 4 Bit DFTs Normalized](figure4_bit_dfts_normalized.png)
+
+## Frequency Representations
+
+The script provides three different frequency representations to suit various analysis needs:
+
+- **Frequency (Hz)**: Standard frequency in cycles per second. Range: 0 to fs/2 (Nyquist frequency).
+- **Angular Frequency (rad/s)**: ω = 2πf. Range: 0 to π×fs rad/s. Useful for continuous-time system analysis.
+- **Normalized Frequency (rad/sample)**: ω̂ = 2πf/fs. Range: 0 to 2π rad/sample. Sampling-rate independent, essential for discrete-time signal processing and filter design.
